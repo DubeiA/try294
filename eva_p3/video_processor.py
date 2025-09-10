@@ -1,12 +1,11 @@
 import os
 import datetime
-from eva_p3.eva_p3_detection_types import DetectionResult
-from eva_p3.eva_p3_config import AnalysisConfig
-from eva_p3.eva_p3_video_processor import VideoProcessor
-from eva_p3.eva_p3_training_system import EnhancedTrainingSystem
-from eva_p3.eva_p3_utils import asdict
+from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List, Any
+
+from eva_p3.detection_types import DetectionResult
+from eva_p1.analysis_config import AnalysisConfig
 
 
 class EnhancedVideoAgent:
@@ -14,8 +13,9 @@ class EnhancedVideoAgent:
 
     def __init__(self, config: AnalysisConfig = None):
         self.config = config or AnalysisConfig()
+        # Lazy/simple processor stub; real processor may be provided elsewhere
         self.processor = VideoProcessor(self.config)
-        self.training_system = EnhancedTrainingSystem(self.config)
+        self.training_system = None
         self.logger = self.processor.analyzer.logger
 
         # Initialize performance metrics
@@ -167,3 +167,28 @@ class EnhancedVideoAgent:
         except Exception as e:
             self.logger.main_logger.error(f"Error during cleanup: {str(e)}")
 
+
+class VideoProcessor:
+    """Lightweight processor stub providing analyze_video interface expected by merged agent.
+
+    Returns an object with fields used downstream (overall_deepfake_score, anatomy/face/artifact/temporal scores).
+    """
+
+    def __init__(self, config: AnalysisConfig, logger=None):
+        self.config = config
+        self.analyzer = logger  # keep attr name used by some loggers
+
+    def analyze_video(self, video_path: str):
+        class _Result:
+            # Lower penalty => higher quality. Keep neutral defaults.
+            overall_deepfake_score = 0.5
+            anatomical_score = 0.0
+            face_quality_score = 0.0
+            artifact_score = 0.0
+            temporal_consistency = 0.0
+            frequency_artifact_score = 0.0
+            frames_analyzed = 0
+            faces_detected = 0
+            analysis_methods = []
+            detected_errors = []
+        return _Result()

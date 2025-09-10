@@ -58,10 +58,12 @@ class MultiDimensionalBandit:
         return data
 
     def _save_data(self, data: Dict[str, Any]):
-        """Save data to file"""
+        """Save data to file atomically to avoid corruption on crash."""
         try:
-            with open(self.state_path, "w", encoding="utf-8") as f:
+            tmp_path = f"{self.state_path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, self.state_path)
         except Exception as e:
             log.error(f"Failed to save bandit state: {e}")
 
@@ -166,7 +168,10 @@ class MultiDimensionalBandit:
 
         # Періодично очищуємо погані комбінації
         if self.t % 10 == 0:
-            self._check_and_ban_poor_combos()
+            try:
+                self._check_and_ban_poor_combos()
+            except Exception as e:
+                log.warning(f"Auto-ban check failed: {e}")
 
         # Вибір параметрів
         if self.t <= 20 or random.random() < 0.3:  # exploration

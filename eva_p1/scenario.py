@@ -1,4 +1,5 @@
 # Copied from eva_p1_prompts.py
+import random
 
 def generate_mega_erotic_scenario():
     """Генерує розширені еротичні сценарії з enormous грудьми/сідницями"""

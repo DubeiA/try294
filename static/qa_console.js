@@ -33,7 +33,13 @@ async function banByVideo(videoName) {
     body: JSON.stringify({ video_name: videoName })
   });
   const data = await res.json();
-  alert(JSON.stringify(data, null, 2));
+  if (data.status === 'success') {
+    alert('✅ Забанено: ' + (data.banned_combo || '') + '\nВідео позначено: ' + (data.video_marked ? 'так' : 'ні'));
+    // Опційно перезавантажити список
+    try { await loadVideos(); } catch(_) {}
+  } else {
+    alert('❌ Помилка: ' + (data.message || 'unknown'));
+  }
 }
 
 window.addEventListener('load', loadVideos);

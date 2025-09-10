@@ -28,6 +28,7 @@ class EnhancedVideoReviewHandler(http.server.SimpleHTTPRequestHandler):
         self.bandit_state_file = os.path.join(self.auto_state_dir, "bandit_state.json")
         self.knowledge_file = os.path.join(self.auto_state_dir, "knowledge.json")
         self.review_queue_file = os.path.join(self.auto_state_dir, "review_queue.json")
+        self.reference_params_file = os.path.join(self.auto_state_dir, "reference_params.json")
         
         # Забезпечуємо існування директорій
         os.makedirs(self.auto_state_dir, exist_ok=True)
@@ -68,6 +69,44 @@ class EnhancedVideoReviewHandler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Помилка збереження {filepath}: {e}")
             return False
+
+    def _append_reference_params(self, params: dict):
+        """Додати запис у reference_params.json (масив об'єктів {"params": {...}})."""
+        try:
+            data = []
+            if os.path.exists(self.reference_params_file):
+                with open(self.reference_params_file, 'r', encoding='utf-8') as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, list):
+                        data = loaded
+                    elif isinstance(loaded, dict):
+                        for key in ("combos", "params_list", "list"):
+                            if isinstance(loaded.get(key), list):
+                                data = loaded.get(key)
+                                break
+            data.append({"params": params})
+            with open(self.reference_params_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"⚠️ Не вдалось додати до reference_params.json: {e}")
+            return False
+
+    def _append_ban_history(self, record: dict):
+        """Додати запис у ban_history.json (масив подій)."""
+        path = os.path.join(self.auto_state_dir, "ban_history.json")
+        try:
+            hist = []
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, list):
+                        hist = loaded
+            hist.append(record)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(hist, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"⚠️ Не вдалось додати у ban_history.json: {e}")
     
     def do_GET(self):
         # Парсимо URL та параметри
@@ -95,6 +134,14 @@ class EnhancedVideoReviewHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_rating()
         else:
             self.send_error(404)
+    
+    def do_OPTIONS(self):
+        # Preflight support for CORS
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
     
     def serve_main_page(self):
         """Повний HTML інтерфейс з усіма функціями"""
@@ -1127,6 +1174,27 @@ class EnhancedVideoReviewHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Оновлюємо систему навчання
                 self._update_learning_system(video_name, rating)
+
+                # Якщо позначено як еталон — додамо у reference_params.json параметри з knowledge
+                try:
+                    if bool(rating.get('is_reference')):
+                        knowledge = self._load_json(self.knowledge_file, {"history": []})
+                        details, _mi = self._enhanced_video_search(video_name, knowledge)
+                        params = (details.get('params') or {}) if isinstance(details, dict) else {}
+                        # Fallback: пробуємо витягнути combo у вигляді полів
+                        if not params and isinstance(details, dict):
+                            combo = details.get('combo') or []
+                            if isinstance(combo, list) and len(combo) >= 2:
+                                params = {
+                                    'sampler': combo[0],
+                                    'scheduler': combo[1],
+                                }
+                        if isinstance(params, dict) and params:
+                            # Додаємо seconds як безпечний дефолт
+                            params.setdefault('seconds', 5.0)
+                            self._append_reference_params(params)
+                except Exception as e:
+                    print(f"⚠️ Reference append failed: {e}")
                 
                 self.send_json_response({"status": "success"})
             else:
@@ -1195,6 +1263,14 @@ class QAReviewHandler(EnhancedVideoReviewHandler):
             self.handle_ban_combo()
             return
         return super().do_POST()
+    
+    def do_OPTIONS(self):
+        # Preflight support for CORS
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
     
     def do_GET(self):
         if self.path == '/qa':
@@ -1297,6 +1373,14 @@ class QAReviewHandler(EnhancedVideoReviewHandler):
                         video_marked = True
                 except Exception:
                     pass
+
+            # Append ban history
+            self._append_ban_history({
+                'timestamp': time.time(),
+                'video_name': video_name,
+                'combo_key': combo_key,
+                'params': params,
+            })
 
             self.send_json_response({"status": "success", "banned_combo": combo_key, "total_banned": len(banned), "video_marked": video_marked})
         except Exception as e:

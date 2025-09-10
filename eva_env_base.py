@@ -30,12 +30,22 @@ try:
 except Exception:
     GPT_AVAILABLE = False
 
-# System paths
-sys.path.append('/workspace/wan22_system')
+"""Environment and optional heavy imports configuration.
 
-WORKSPACE_DIR = "/workspace"
-SYSTEM_BASE_DIR = f"{WORKSPACE_DIR}/wan22_system"
+Env vars:
+- WORKSPACE_DIR (default: /workspace)
+- WAN22_SYSTEM_DIR (default: {WORKSPACE_DIR}/wan22_system)
+- EVA_SKIP_HEAVY_IMPORTS=1 to skip importing big ML libs at module import time
+"""
+
+# System paths (configurable via env)
+WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/workspace")
+SYSTEM_BASE_DIR = os.environ.get("WAN22_SYSTEM_DIR", f"{WORKSPACE_DIR}/wan22_system")
 LOGS_DIR = f"{SYSTEM_BASE_DIR}/logs"
+
+# Ensure code can import local modules when running on RunPod
+if SYSTEM_BASE_DIR not in sys.path:
+    sys.path.append(SYSTEM_BASE_DIR)
 
 # Ensure required directories exist
 for d in [SYSTEM_BASE_DIR,
@@ -62,15 +72,25 @@ logging.basicConfig(
 )
 log = logging.getLogger("enhanced-video-agent-v4")
 
-# ---- Centralized heavy imports & availability flags (moved from eva_p2_cli_patch.py) ----
+# ---- Centralized heavy imports & availability flags (optional) ----
 import pandas as pd  # optional usage downstream
 from PIL import Image, ImageEnhance, ImageFilter  # optional usage downstream
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
+SKIP_HEAVY = os.environ.get("EVA_SKIP_HEAVY_IMPORTS", "0") == "1"
+
+# Torch (optional)
+try:
+    if not SKIP_HEAVY:
+        import torch
+        import torch.nn as nn
+        import torch.nn.functional as F
+        import torchvision.transforms as transforms
+        from torch.utils.data import Dataset, DataLoader
+        TORCH_AVAILABLE = True
+    else:
+        TORCH_AVAILABLE = False
+except Exception:
+    TORCH_AVAILABLE = False
 
 # Machine Learning Libraries
 from sklearn.ensemble import RandomForestClassifier, IsolationForest
@@ -86,41 +106,56 @@ import joblib
 
 # Deep Learning Libraries
 try:
-    import tensorflow as tf
-    from tensorflow.keras.models import Sequential, Model
-    from tensorflow.keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Dropout, LSTM, Attention
-    from tensorflow.keras.optimizers import Adam
-    from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-    TF_AVAILABLE = True
+    if not SKIP_HEAVY:
+        import tensorflow as tf
+        from tensorflow.keras.models import Sequential, Model
+        from tensorflow.keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Dropout, LSTM, Attention
+        from tensorflow.keras.optimizers import Adam
+        from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+        TF_AVAILABLE = True
+    else:
+        TF_AVAILABLE = False
 except ImportError:
     TF_AVAILABLE = False
 
 # Computer Vision Libraries
 try:
-    import mediapipe as mp
-    MEDIAPIPE_AVAILABLE = True
+    if not SKIP_HEAVY:
+        import mediapipe as mp
+        MEDIAPIPE_AVAILABLE = True
+    else:
+        MEDIAPIPE_AVAILABLE = False
 except ImportError:
     MEDIAPIPE_AVAILABLE = False
 
 try:
-    import dlib
-    DLIB_AVAILABLE = True
+    if not SKIP_HEAVY:
+        import dlib
+        DLIB_AVAILABLE = True
+    else:
+        DLIB_AVAILABLE = False
 except ImportError:
     DLIB_AVAILABLE = False
 
 # Signal Processing
 try:
-    from scipy import signal as scipy_signal
-    from scipy.stats import entropy, kurtosis, skew
-    from scipy.fft import fft, fftfreq
-    SCIPY_AVAILABLE = True
+    if not SKIP_HEAVY:
+        from scipy import signal as scipy_signal
+        from scipy.stats import entropy, kurtosis, skew
+        from scipy.fft import fft, fftfreq
+        SCIPY_AVAILABLE = True
+    else:
+        SCIPY_AVAILABLE = False
 except ImportError:
     SCIPY_AVAILABLE = False
 
 # Optional optimization library
 try:
-    import optuna
-    OPTUNA_AVAILABLE = True
+    if not SKIP_HEAVY:
+        import optuna
+        OPTUNA_AVAILABLE = True
+    else:
+        OPTUNA_AVAILABLE = False
 except ImportError:
     OPTUNA_AVAILABLE = False
 
