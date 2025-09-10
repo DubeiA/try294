@@ -50,7 +50,7 @@ class EnhancedVideoAgentV4:
         if not validate_workflow_nodes(self.base_wf):
             raise ValueError("Workflow validation failed")
 
-        self.seconds = max(5.0, seconds)
+        self.seconds = max(7.0, seconds)
         self.analyzer = VideoAnalyzer()
 
         # Setup knowledge system
@@ -236,6 +236,78 @@ class EnhancedVideoAgentV4:
         with open(self.queue_path, "w", encoding="utf-8") as f:
             json.dump(self.review_queue, f, ensure_ascii=False, indent=2)
 
+    def _check_and_process_new_ratings(self):
+        """Перевіряє, чи з'явилися нові manual_ratings і запускає OpenRouter аналіз для них.
+
+        Зберігає результати в state_dir/openrouter_results.json і використовує
+        mtime manual_ratings.json, щоб уникати повторної обробки.
+        """
+        try:
+            if not getattr(self, 'gpt_analyzer', None):
+                return
+            ratings_file = os.path.join(self.state_dir, "manual_ratings.json")
+            if not os.path.exists(ratings_file):
+                return
+            last_flag = os.path.join(self.state_dir, "last_rating_check.txt")
+            current_mtime = 0.0
+            try:
+                current_mtime = os.path.getmtime(ratings_file)
+            except Exception:
+                return
+
+            last_check_time = 0.0
+            if os.path.exists(last_flag):
+                try:
+                    with open(last_flag, 'r', encoding='utf-8') as f:
+                        last_check_time = float((f.read() or '0').strip())
+                except Exception:
+                    last_check_time = 0.0
+
+            if current_mtime <= last_check_time:
+                return
+
+            log.info("🤖 Знайдено нові manual_ratings — запускаємо OpenRouter аналіз")
+            try:
+                with open(ratings_file, 'r', encoding='utf-8') as f:
+                    ratings_data = json.load(f)
+            except Exception as e:
+                log.warning(f"Не вдалося прочитати manual_ratings.json: {e}")
+                return
+
+            analysis_file = os.path.join(self.state_dir, "openrouter_results.json")
+            existing = {}
+            try:
+                if os.path.exists(analysis_file):
+                    with open(analysis_file, 'r', encoding='utf-8') as f:
+                        existing = json.load(f) or {}
+            except Exception:
+                existing = {}
+
+            for video_name, rating_data in (ratings_data.items() if isinstance(ratings_data, dict) else []):
+                try:
+                    result = self.gpt_analyzer.analyze_manual_rating(video_name, rating_data)
+                    log.info(f"✅ OpenRouter: {video_name} score={result.get('quality_score', 0):.3f}")
+                    existing[video_name] = {
+                        "analysis": result,
+                        "processed_at": time.time(),
+                    }
+                except Exception as e:
+                    log.warning(f"OpenRouter помилка для {video_name}: {e}")
+
+            try:
+                with open(analysis_file, 'w', encoding='utf-8') as f:
+                    json.dump(existing, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                log.warning(f"Не вдалося зберегти openrouter_results.json: {e}")
+
+            try:
+                with open(last_flag, 'w', encoding='utf-8') as f:
+                    f.write(str(current_mtime))
+            except Exception:
+                pass
+        except Exception as e:
+            log.warning(f"_check_and_process_new_ratings failed: {e}")
+
     def find_generated_video(self, prefix: str) -> Optional[str]:
         """Find generated video in ComfyUI output directory"""
         search_paths = [
@@ -370,6 +442,11 @@ class EnhancedVideoAgentV4:
 
         Returns: (score, metrics, video_path, applied_workflow)
         """
+        # Перевіряємо наявність нових ручних оцінок і запускаємо OpenRouter для них
+        try:
+            self._check_and_process_new_ratings()
+        except Exception:
+            pass
         from eva_p1.workflow import apply_enhanced_params_to_workflow
         # Always autogenerate prompt/negative via mega_erotic_generator (V5-like)
         try:
@@ -422,6 +499,7 @@ class EnhancedVideoAgentV4:
         wf = apply_enhanced_params_to_workflow(self.base_wf, params)
         try:
             # Queue job
+            log.info(f"🚀 Генерація: {self._format_params_info(params)} | seconds={params.get('seconds', self.seconds)}")
             prompt_id = self.client.queue(wf)
             hist = self.client.wait(prompt_id, timeout_s=int(max(600, params.get('seconds', self.seconds) * 120)))
         except Exception as e:
@@ -435,8 +513,10 @@ class EnhancedVideoAgentV4:
         if video_path and os.path.exists(video_path):
             # Basic analysis (fast)
             try:
+                log.info("🔎 Старт базового аналізу відео")
                 metrics = self.analyzer.analyze(video_path)
                 score = float(metrics.get('overall', 0.0))
+                log.info(f"📈 Результати аналізу: overall={score:.3f}")
             except Exception as e:
                 log.warning(f"Basic analysis failed: {e}")
                 metrics = {"overall": 0.0}
