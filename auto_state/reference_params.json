@@ -1,0 +1,233 @@
+{
+  "reference_videos": [
+    {
+      "params": {
+        "sampler": "dpm_2_ancestral",
+        "scheduler": "normal",
+        "fps": 20,
+        "seconds": 7.0,
+        "width": 768,
+        "height": 432,
+        "cfg_scale": 1.0,
+        "steps": 5
+      },
+      "analysis": {
+        "quality_score": 0.82,
+        "main_problems": [],
+        "parameter_adjustments": {
+          "sampler_preference": "maintain_current",
+          "scheduler_preference": "no_preference",
+          "fps_adjustment": "maintain",
+          "steps_adjustment": "maintain",
+          "cfg_adjustment": "maintain"
+        },
+        "prompt_improvements": [],
+        "technical_fixes": [],
+        "is_reference_worthy": true,
+        "learning_priority": "low"
+      },
+      "saved_at": 1756994923.5623312
+    },
+    {
+      "params": {
+        "sampler": "dpmpp_2m",
+        "scheduler": "normal",
+        "fps": 15,
+        "seconds": 8.0,
+        "width": 640,
+        "height": 504,
+        "cfg_scale": 1.0,
+        "steps": 8
+      },
+      "analysis": {
+        "quality_score": 0.82,
+        "main_problems": [],
+        "parameter_adjustments": {
+          "sampler_preference": "no_preference",
+          "scheduler_preference": "prefer_normal",
+          "fps_adjustment": "maintain",
+          "steps_adjustment": "maintain",
+          "cfg_adjustment": "maintain"
+        },
+        "prompt_improvements": [],
+        "technical_fixes": [],
+        "is_reference_worthy": true,
+        "learning_priority": "low"
+      },
+      "saved_at": 1757014733.613533
+    },
+    {
+      "params": {
+        "sampler": "euler",
+        "scheduler": "normal",
+        "fps": 25,
+        "seconds": 5.0,
+        "width": 512,
+        "height": 768,
+        "cfg_scale": 1.0,
+        "steps": 4
+      },
+      "analysis": {
+        "quality_score": 1.0,
+        "main_problems": [],
+        "parameter_adjustments": {
+          "sampler_preference": "prefer_stable",
+          "scheduler_preference": "maintain_current",
+          "fps_adjustment": "maintain",
+          "steps_adjustment": "maintain",
+          "cfg_adjustment": "maintain"
+        },
+        "prompt_improvements": [
+          "document current prompt structure for replication",
+          "save as prompt template for similar tasks"
+        ],
+        "technical_fixes": [
+          "save current parameter configuration as preset",
+          "document full generation settings for reference"
+        ],
+        "is_reference_worthy": true,
+        "learning_priority": "high"
+      },
+      "saved_at": 1757015384.9081523
+    },
+    {
+      "params": {
+        "sampler": "dpm_2_ancestral",
+        "scheduler": "normal",
+        "fps": 25,
+        "seconds": 5.0,
+        "width": 640,
+        "height": 640,
+        "cfg_scale": 1.0,
+        "steps": 4
+      },
+      "analysis": {
+        "quality_score": 0.97,
+        "main_problems": [],
+        "parameter_adjustments": {
+          "sampler_preference": "prefer_current",
+          "scheduler_preference": "no_preference",
+          "fps_adjustment": "maintain",
+          "steps_adjustment": "maintain",
+          "cfg_adjustment": "maintain"
+        },
+        "prompt_improvements": [
+          "document current prompt structure for reference",
+          "preserve existing lighting descriptions",
+          "maintain current detail level"
+        ],
+        "technical_fixes": [
+          "document current parameter configuration as golden standard",
+          "create parameter preset based on these settings"
+        ],
+        "is_reference_worthy": true,
+        "learning_priority": "high"
+      },
+      "saved_at": 1757077488.1576974
+    },
+    {
+      "params": {
+        "sampler": "dpmpp_sde",
+        "scheduler": "karras",
+        "fps": 23,
+        "seconds": 5.0,
+        "width": 768,
+        "height": 432,
+        "cfg_scale": 1.5,
+        "steps": 10
+      },
+      "analysis": {
+        "quality_score": 0.95,
+        "main_problems": [
+          "fire_rendering",
+          "lighting_complexity"
+        ],
+        "parameter_adjustments": {
+          "sampler_preference": "prefer_stable",
+          "scheduler_preference": "prefer_karras",
+          "fps_adjustment": "maintain",
+          "steps_adjustment": "increase",
+          "cfg_adjustment": "increase"
+        },
+        "prompt_improvements": [
+          "enhance fire and fireplace descriptions",
+          "add specific lighting details for flame effects",
+          "include material properties for reflective surfaces"
+        ],
+        "technical_fixes": [
+          "increase sampling steps for better fire detail",
+          "adjust CFG scale for more precise fire rendering",
+          "maintain current motion settings due to high motion score"
+        ],
+        "is_reference_worthy": true,
+        "learning_priority": "medium"
+      },
+      "saved_at": 1757148979.7783604
+    },
+    {
+      "params": {
+        "sampler": "dpm_2",
+        "scheduler": "normal",
+        "fps": 15,
+        "seconds": 7.0,
+        "width": 768,
+        "height": 432,
+        "cfg_scale": 1.0,
+        "steps": 10
+      },
+      "analysis": {
+        "quality_score": 0.83,
+        "main_problems": [],
+        "parameter_adjustments": {
+          "sampler_preference": "maintain_current",
+          "scheduler_preference": "prefer_normal",
+          "fps_adjustment": "maintain",
+          "steps_adjustment": "maintain",
+          "cfg_adjustment": "maintain"
+        },
+        "prompt_improvements": [],
+        "technical_fixes": [],
+        "is_reference_worthy": true,
+        "learning_priority": "low"
+      },
+      "saved_at": 1757149444.0919597
+    },
+    {
+      "params": {
+        "sampler": "dpmpp_2m_sde",
+        "scheduler": "simple",
+        "fps": 25,
+        "seconds": 6.0,
+        "width": 640,
+        "height": 640,
+        "cfg_scale": 1.0,
+        "steps": 4
+      },
+      "analysis": {
+        "quality_score": 0.98,
+        "main_problems": [
+          "water_interaction_physics"
+        ],
+        "parameter_adjustments": {
+          "sampler_preference": "maintain_current",
+          "scheduler_preference": "prefer_karras",
+          "fps_adjustment": "maintain",
+          "steps_adjustment": "maintain",
+          "cfg_adjustment": "maintain"
+        },
+        "prompt_improvements": [
+          "add water ripple/interaction effects",
+          "enhance fluid dynamics descriptions",
+          "maintain current anatomy/pose descriptions"
+        ],
+        "technical_fixes": [
+          "implement water physics simulation layer",
+          "maintain current face and body generation parameters"
+        ],
+        "is_reference_worthy": true,
+        "learning_priority": "low"
+      },
+      "saved_at": 1757149738.646421
+    }
+  ]
+}
