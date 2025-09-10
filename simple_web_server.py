@@ -1729,22 +1729,27 @@ class QAReviewHandler(EnhancedVideoReviewHandler):
         self.wfile.write(html.encode('utf-8'))
 
 if __name__ == '__main__':
-    PORT = 8189
-    
+    # Порт з ENV (SERVER_PORT/PORT), дефолт 8189
+    PORT = int(os.environ.get('SERVER_PORT', os.environ.get('PORT', '8189')))
+
     print("🚀 Запуск Enhanced Video Review System (Quick Fix) для RunPod...")
-    print(f"📁 Робоча директорія: /workspace/wan22_system/")
-    print(f"🎬 Директорія відео: /workspace/ComfyUI/output/")
-    print(f"💾 JSON файли: /workspace/wan22_system/auto_state/")
+    print(f"📁 Робоча директорія: {os.environ.get('WAN22_SYSTEM_DIR', '/workspace/wan22_system/')}")
+    print(f"🎬 Директорія відео: {os.environ.get('COMFY_OUTPUT_DIR', '/workspace/ComfyUI/output/')}")
+    print(f"💾 JSON файли: {os.path.join(os.environ.get('WAN22_SYSTEM_DIR', '/workspace/wan22_system/'), 'auto_state')}")
     print(f"🌐 Сервер запущено на порту {PORT}")
-    print("📱 Відкрийте в RunPod URL для порту 8189")
-    
+    print(f"📱 Відкрийте в RunPod URL для порту {PORT}")
+
     print("\n🔧 Quick Fix виправлення:")
     print("  ✅ Виправлена обробка URL параметрів для /api/videos")
     print("  ✅ Додане детальне логування для діагностики")
     print("  ✅ Спрощений алгоритм пошуку відео")
     print("  ✅ Покращена обробка помилок")
-    
-    with socketserver.TCPServer(("", PORT), QAReviewHandler) as httpd:
+
+    # Дозволяємо перевикористання адреси та багатопоточність для кращої продуктивності
+    class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+        allow_reuse_address = True
+
+    with ThreadingTCPServer(("", PORT), QAReviewHandler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
