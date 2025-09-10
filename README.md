@@ -285,7 +285,7 @@ python /workspace/wan22_system/simple_web_server.py
 
 #### RunPod (L40S + JupyterLab)
 
-1) Запустіть pod із JupyterLab та GPU L40S (образ з Python + PyTorch 2.2).
+1) Запустіть pod із JupyterLab та GPU L40S (образ з  ComfyUI Manager Permanent Disk torch2.2). Та додайте додатковий порт 8189
 2) Відкрийте JupyterLab → Terminal.
 3) Розмістіть репозиторій у `/workspace/wan22_system` (або скопіюйте туди вміст):
 ```bash
@@ -495,6 +495,5 @@ API:
 
 ---
 
-Готово! Якщо потрібно, можу доповнити README інструкціями з інтеграції конкретного агента/потоку генерації або додати параметризацію шляхів для кросплатформеності.
 
 

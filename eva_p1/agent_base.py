@@ -112,6 +112,13 @@ class EnhancedVideoAgentV4:
         log.info(f"🎯 Multi-dimensional bandit ready")
         log.info(f"🔥 MEGA EROTIC intelligent JSON prompt generation enabled")
         log.info(f"⏰ Minimum video duration: {self.seconds}s")
+        # Duplicate to main logger if available
+        try:
+            from eva_p3.logger import EnhancedLogger as _EL
+            _dummy = _EL
+            log.info("🪵 Logging initialized; check auto_state/logs_improved/main.log or logs/main.log")
+        except Exception:
+            pass
 
     def get_stats_v4(self) -> Dict[str, Any]:
         """Return aggregated stats for QA CLI and UI.
