@@ -455,10 +455,16 @@ class EnhancedVideoAgentV4:
         except Exception:
             pass
         from eva_p1.workflow import apply_enhanced_params_to_workflow
-        # Always autogenerate prompt/negative via mega_erotic_generator (V5-like)
+        # Always autogenerate prompt/negative via generator and IGNORE any prompt from reference params
+        # Ensure uniqueness and no carry-over from incoming params
+        params.pop('prompt', None)
+        params.pop('negative_prompt', None)
         try:
             pj = self.mega_erotic_generator.generate_ultra_detailed_json_prompt()
-            params['prompt'] = self.mega_erotic_generator.convert_to_erotic_text_prompt(pj)
+            gen_text = self.mega_erotic_generator.convert_to_erotic_text_prompt(pj)
+            # Append unique token to ensure uniqueness even with similar base prompt
+            unique_suffix = f" [id:{int(time.time())}]"
+            params['prompt'] = f"{gen_text}{unique_suffix}"
 
             # Base negative from generator + extended hard blacklist for style/quality/anatomy artifacts
             extended_negative = (
@@ -466,7 +472,7 @@ class EnhancedVideoAgentV4:
                 "3d render, stylized, cel shading, toon shading, comic style, graphic novel, webtoon, manhwa, chibi, kawaii, "
                 "doll, toy, figurine, plastic, artificial, fake, synthetic, rendered, computer generated, video game character, "
                 "fantasy character, unreal, surreal, abstract, conceptual, artistic interpretation, low quality, worst quality, "
-                "blurry, out of focus, pixelated, compressed, jpeg artifacts, noise, grain, distorted, deformed, disfigured, malformed, "
+                "blurry, out of focus, pixelated, compressed, jpeg artifacts, noise, grain, distorted, disfigured, malformed, "
                 "mutated, ugly, grotesque, hideous, repulsive, bad anatomy, wrong anatomy, extra limbs, missing limbs, extra arms, "
                 "missing arms, extra legs, missing legs, extra fingers, missing fingers, fused fingers, too many fingers, extra hands, "
                 "missing hands, malformed hands, bad hands, poorly drawn hands, extra heads, missing head, multiple heads, extra eyes, "
@@ -481,6 +487,12 @@ class EnhancedVideoAgentV4:
             params['negative_prompt'] = (base_neg + ", " + extended_negative).strip(', ')
         except Exception as e:
             log.warning(f"Prompt generation failed: {e}")
+            # Hard fallback to ensure we NEVER reuse prompt from reference params
+            prefix = params.get('prefix') or f"gen_{int(time.time())}"
+            params['prompt'] = f"ultra-detailed cinematic realistic scene, high quality, 4k, [id:{prefix}]"
+            params['negative_prompt'] = (
+                "blurry, low quality, jpeg artifacts, bad anatomy, extra limbs, deformed, watermark, text, logo"
+            )
         # Set unique prefix to bind outputs; save prompt artifacts
         prefix = f"gen_{int(time.time())}"
         try:
@@ -501,6 +513,14 @@ class EnhancedVideoAgentV4:
             log.info(f"📝 Saved prompt: {prompt_txt_path}")
         except Exception as e:
             log.warning(f"Failed to save prompt artifacts: {e}")
+
+        # Debug-log first 120 chars of the final prompt to show what will be used
+        try:
+            ptxt = params.get('prompt', '')
+            phash = hex(abs(hash(ptxt)) & 0xffffffff)
+            log.info(f"🧾 Prompt (hash={phash}): {ptxt[:120]}{'...' if len(ptxt)>120 else ''}")
+        except Exception:
+            pass
 
         # Prepare workflow with params
         wf = apply_enhanced_params_to_workflow(self.base_wf, params)
@@ -577,7 +597,11 @@ class EnhancedVideoAgentV4:
             log.info(f"✅ Reference-only mode активний: {len(self.reference_params)} комбінацій")
             for i in range(iters):
                 params = self.generate_next_params()
-                log.info(f"▶️ Iteration {i+1}/{iters} (reference-only): params={params}")
+                # При логуванні не показуємо сирі prompt/negative з reference-файлу
+                safe = dict(params)
+                safe.pop('prompt', None)
+                safe.pop('negative_prompt', None)
+                log.info(f"▶️ Iteration {i+1}/{iters} (reference-only): params={safe}")
                 score, metrics, video_path, _ = self.run_iteration_v4(params)
                 log.info(f"✅ Done iter {i+1}: score={score:.3f}, video={video_path}")
             return
@@ -592,7 +616,10 @@ class EnhancedVideoAgentV4:
                     params = raw if isinstance(raw, dict) else {}
                 # Ensure seconds present
                 params.setdefault('seconds', self.seconds)
-                log.info(f"▶️ Iteration {i+1}/{iters} (whitelist): params={params}")
+                safe = dict(params)
+                safe.pop('prompt', None)
+                safe.pop('negative_prompt', None)
+                log.info(f"▶️ Iteration {i+1}/{iters} (whitelist): params={safe}")
                 score, metrics, video_path, _ = self.run_iteration_v4(params)
                 log.info(f"✅ Done iter {i+1}: score={score:.3f}, video={video_path}")
             return
