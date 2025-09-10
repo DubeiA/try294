@@ -61,6 +61,18 @@ def patch_logging_to_auto_state():
                 self.main_logger.addHandler(console_handler)
                 self.main_logger.propagate = False
 
+                # Also route module-level logger (agent_mod.log from eva_env_base)
+                try:
+                    module_log = getattr(agent_mod, 'log', None)
+                    if module_log is not None:
+                        module_log.setLevel(getattr(logging, self.config.log_level))
+                        module_log.handlers = []
+                        module_log.addHandler(main_handler)
+                        module_log.addHandler(console_handler)
+                        module_log.propagate = False
+                except Exception:
+                    pass
+
                 self.training_logger = logging.getLogger("training")
                 self.training_logger.setLevel(logging.DEBUG)
                 self.training_logger.handlers = []

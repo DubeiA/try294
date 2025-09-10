@@ -62,14 +62,7 @@ for d in [SYSTEM_BASE_DIR,
         pass
 
 # Basic logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(f"{LOGS_DIR}/agent_v4.log", encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 log = logging.getLogger("enhanced-video-agent-v4")
 
 # ---- Centralized heavy imports & availability flags (optional) ----
