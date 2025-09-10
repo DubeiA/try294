@@ -14,7 +14,8 @@ import cv2
 class EnhancedVideoAgentV4:
     """Enhanced Video Agent v4 with Mega Erotic JSON Prompt Generator Integration + GPT"""
 
-    def __init__(self, api: str, base_workflow: str, state_dir: str = None, seconds: float = 5.0, openrouter_key: str = None):
+    def __init__(self, api: str, base_workflow: str, state_dir: str = None, seconds: float = 5.0, openrouter_key: str = None,
+                 reference_only: bool = False, reference_file: Optional[str] = None):
         if state_dir is None:
             state_dir = f"{SYSTEM_BASE_DIR}/auto_state"
 
@@ -68,6 +69,27 @@ class EnhancedVideoAgentV4:
         # Initialize multi-dimensional bandit
         bandit_path = os.path.join(self.state_dir, "bandit_state.json")
         self.bandit = MultiDimensionalBandit(bandit_path)
+
+        # Reference-only mode configuration
+        self.reference_only_mode = bool(reference_only)
+        self.reference_file = reference_file
+        self.reference_params: List[Dict[str, Any]] = []
+        if self.reference_only_mode:
+            try:
+                self.reference_params = self.bandit.load_reference_params(self.reference_file)
+                if self.reference_params:
+                    log.info(f"🌟 REFERENCE-ONLY MODE: Завантажено {len(self.reference_params)} еталонних комбінацій")
+                    for i, p in enumerate(self.reference_params):
+                        try:
+                            log.info(f"  {i+1}. {self._format_params_info(p)}")
+                        except Exception:
+                            pass
+                else:
+                    log.warning("⚠️ reference-only: список порожній — вимикаємо режим")
+                    self.reference_only_mode = False
+            except Exception as e:
+                log.warning(f"Reference-only load failed: {e}")
+                self.reference_only_mode = False
 
         # 🤖 ДОДАЄМО GPT АНАЛІЗАТОР
         if openrouter_key and GPT_AVAILABLE:
@@ -321,6 +343,27 @@ class EnhancedVideoAgentV4:
 
         log.info(f"✚ Added to review queue: {video_id} (priority: {priority})")
 
+    def _format_params_info(self, params: Dict[str, Any]) -> str:
+        """Compact params summary for logs"""
+        keys = ['sampler', 'scheduler', 'fps', 'cfg_scale', 'steps', 'width', 'height']
+        parts = []
+        for k in keys:
+            if k in params:
+                parts.append(f"{k}={params.get(k)}")
+        return " | ".join(parts)
+
+    def generate_next_params(self) -> Dict[str, Any]:
+        """Pick next params according to mode (reference-only or bandit)."""
+        if self.reference_only_mode and self.reference_params:
+            selected = self.bandit.select_reference_only(self.reference_params)
+            # Ensure seconds present
+            if 'seconds' not in selected:
+                selected['seconds'] = self.seconds
+            log.info(f"🌟 REFERENCE MODE: {self._format_params_info(selected)}")
+            return selected
+        # fallback: bandit-driven
+        return self.bandit.select_params()
+
     # ==== High-level search/generation loop expected by QA CLI ====
     def run_iteration_v4(self, params: Dict[str, Any]):
         """Single iteration: apply params to workflow, queue in ComfyUI, wait, analyze, update knowledge/bandit.
@@ -437,11 +480,22 @@ class EnhancedVideoAgentV4:
         """Main search loop.
 
         Behavior:
-        - If whitelist file auto_state/reference_params.json exists and contains combos, iterate over them (cycling if iterations > len(whitelist)).
+        - If reference-only mode is enabled, iterate only over reference params.
+        - Else if whitelist file auto_state/reference_params.json contains combos, iterate over them (cycling).
         - Otherwise, fall back to MultiDimensionalBandit selection.
         """
-        wl = self._load_whitelist_params()
         iters = int(max(1, iterations))
+        # Strict reference-only mode
+        if self.reference_only_mode and self.reference_params:
+            log.info(f"✅ Reference-only mode активний: {len(self.reference_params)} комбінацій")
+            for i in range(iters):
+                params = self.generate_next_params()
+                log.info(f"▶️ Iteration {i+1}/{iters} (reference-only): params={params}")
+                score, metrics, video_path, _ = self.run_iteration_v4(params)
+                log.info(f"✅ Done iter {i+1}: score={score:.3f}, video={video_path}")
+            return
+
+        wl = self._load_whitelist_params()
         if wl:
             log.info(f"✅ Whitelist mode: {len(wl)} preset combos found in reference_params.json")
             for i in range(iters):
@@ -474,6 +528,7 @@ class EnhancedVideoAgentV4:
         - Array of {"params": {...}}
         - Array of params dicts
         - {"combos": [...]} or {"params_list": [...]} wrappers
+        - {"reference_combinations": [...]} or {"reference_videos": [{"params":{...}}]}
         Returns list (possibly empty) of items (dicts). Caller will extract 'params' if present.
         """
         import json
@@ -486,6 +541,18 @@ class EnhancedVideoAgentV4:
             if isinstance(data, list):
                 return data
             if isinstance(data, dict):
+                if isinstance(data.get('reference_combinations'), list):
+                    return data.get('reference_combinations')
+                if isinstance(data.get('reference_videos'), list):
+                    # normalize to list of {"params": {...}}
+                    out = []
+                    for it in data.get('reference_videos'):
+                        if isinstance(it, dict):
+                            if isinstance(it.get('params'), dict):
+                                out.append({'params': it.get('params')})
+                            else:
+                                out.append(it)
+                    return out
                 for key in ('combos', 'params_list', 'list'):
                     if isinstance(data.get(key), list):
                         return data.get(key)

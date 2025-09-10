@@ -13,8 +13,10 @@ except Exception:
 # 1:1 copy from eva_p2_merged_agent.py
 class EnhancedVideoAgentV4Merged(EnhancedVideoAgentV4):
     def __init__(self, api: str, base_workflow: str, state_dir: str = None, seconds: float = 5.0, openrouter_key: str = None,
-                 use_enhanced_analysis: bool = True, train_improved: bool = False, logger=None):
-        super().__init__(api=api, base_workflow=base_workflow, state_dir=state_dir, seconds=seconds, openrouter_key=openrouter_key)
+                 use_enhanced_analysis: bool = True, train_improved: bool = False, logger=None,
+                 reference_only: bool = False, reference_file: str | None = None):
+        super().__init__(api=api, base_workflow=base_workflow, state_dir=state_dir, seconds=seconds, openrouter_key=openrouter_key,
+                         reference_only=reference_only, reference_file=reference_file)
 
         self.use_enhanced_analysis = bool(use_enhanced_analysis)
         self.enhanced_logger = None

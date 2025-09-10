@@ -1,13 +1,22 @@
 # Copied from eva_p1_config_gpt.py (requires openai, log, GPT_AVAILABLE, re, json)
 from typing import Dict, Any
+import re, json
+from eva_env_base import log, GPT_AVAILABLE
+try:
+    import openai  # type: ignore
+except Exception:
+    openai = None  # type: ignore
 
 class OpenRouterAnalyzer:
     """Аналізатор ручних оцінок через OpenRouter GPT"""
     
     def __init__(self, api_key: str):
-        if not GPT_AVAILABLE:
+        if not GPT_AVAILABLE or openai is None:
             raise ImportError("OpenAI library required for GPT integration")
-            
+
+        if not api_key:
+            raise ValueError("OpenRouter API key is required")
+
         self.client = openai.OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key
@@ -74,7 +83,7 @@ Focus on actionable technical recommendations based on the ratings and comments.
             log.info(f"🤖 GPT response received for {video_name} ({len(analysis_text)} chars)")
             
             # Витягуємо JSON з відповіді
-            json_match = re.search(r'\{.*\}', analysis_text, re.DOTALL)
+            json_match = re.search(r'\{[\s\S]*\}', analysis_text, re.DOTALL)
             if json_match:
                 analysis = json.loads(json_match.group())
                 log.info(f"✅ GPT Analysis for {video_name}: score={analysis.get('quality_score', 0):.3f}, problems={analysis.get('main_problems', [])}")

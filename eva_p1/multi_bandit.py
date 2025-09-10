@@ -1,6 +1,6 @@
 # Copied from eva_p1_comfy_video_bandit.py
 import os, json, math, random
-from typing import Dict, Any
+from typing import Dict, Any, List
 from eva_env_base import log
 from eva_p1.analysis_config import FPS_OPTIONS, SECONDS_OPTIONS, CFG_SCALES, STEPS_OPTIONS, RESOLUTION_OPTIONS
 
@@ -240,3 +240,69 @@ class MultiDimensionalBandit:
 
         self.save()
 
+
+    # --- Reference-only helpers -------------------------------------------------
+    def load_reference_params(self, reference_file: str = None) -> List[Dict[str, Any]]:
+        """Завантаження еталонних параметрів з файлу.
+
+        Підтримувані формати:
+        - {"reference_combinations": [ {..params..} | {"params": {..}} ]}
+        - {"params_list"|"combos"|"list": [ {..} | {"params":{..}} ]}
+        - {"reference_videos": [ {"params": {..}} ]}
+        - простий масив: [ {..} | {"params":{..}} ]
+        """
+        if reference_file is None:
+            reference_file = os.path.join(os.path.dirname(self.state_path), "reference_params.json")
+
+        try:
+            if os.path.exists(reference_file):
+                with open(reference_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                ref_items: List[Dict[str, Any]] = []
+
+                # Helper: normalize list items to params dicts
+                def _normalize_list(items: List[Any]) -> List[Dict[str, Any]]:
+                    out: List[Dict[str, Any]] = []
+                    for it in items:
+                        if isinstance(it, dict):
+                            if 'params' in it and isinstance(it['params'], dict):
+                                out.append(dict(it['params']))
+                            else:
+                                out.append(dict(it))
+                    return out
+
+                if isinstance(data, dict):
+                    for key in ("reference_combinations", "params_list", "combos", "list"):
+                        if isinstance(data.get(key), list):
+                            ref_items = _normalize_list(data.get(key) or [])
+                            break
+                    if not ref_items and isinstance(data.get("reference_videos"), list):
+                        ref_items = _normalize_list(data.get("reference_videos") or [])
+                elif isinstance(data, list):
+                    ref_items = _normalize_list(data)
+
+                if ref_items:
+                    log.info(f"🌟 Завантажено {len(ref_items)} еталонних комбінацій")
+                    return ref_items
+                else:
+                    log.warning("⚠️ reference_params.json порожній або має неправильну структуру")
+            else:
+                log.warning(f"⚠️ Файл {reference_file} не знайдено")
+
+        except Exception as e:
+            log.error(f"❌ Помилка завантаження reference_params.json: {e}")
+
+        return []
+
+    def select_reference_only(self, reference_combinations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Вибір параметрів тільки з еталонних комбінацій (циклічно)."""
+        if not reference_combinations:
+            log.error("❌ Немає еталонних комбінацій для вибору!")
+            return self._generate_random_params()  # Fallback
+
+        current_index = self.t % len(reference_combinations)
+        selected_params = dict(reference_combinations[current_index])
+        log.info(f"🌟 Вибрано еталонну комбінацію {current_index + 1}/{len(reference_combinations)}")
+        log.info(f"📋 Параметри: {selected_params}")
+        return selected_params
