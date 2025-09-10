@@ -8,6 +8,8 @@ class EnhancedLogger:
 
     def __init__(self, config: AnalysisConfig):
         self.config = config
+        # Default log directory (can be overridden by QA patches)
+        self.log_dir = "logs"
         self.setup_loggers()
         self.training_logs = []
         self.analysis_logs = []
@@ -16,16 +18,16 @@ class EnhancedLogger:
         """Setup multiple loggers for different purposes."""
 
         # Create logs directory
-        os.makedirs("logs", exist_ok=True)
+        os.makedirs(self.log_dir, exist_ok=True)
 
         # Main logger
         self.main_logger = logging.getLogger("enhanced_video_agent")
         self.main_logger.setLevel(getattr(logging, self.config.log_level))
 
         # File handlers
-        main_handler = logging.FileHandler("logs/main.log")
-        training_handler = logging.FileHandler("logs/training.log")
-        analysis_handler = logging.FileHandler("logs/analysis.log")
+        main_handler = logging.FileHandler(os.path.join(self.log_dir, "main.log"))
+        training_handler = logging.FileHandler(os.path.join(self.log_dir, "training.log"))
+        analysis_handler = logging.FileHandler(os.path.join(self.log_dir, "analysis.log"))
 
         # Console handler
         console_handler = logging.StreamHandler(sys.stdout)
@@ -110,11 +112,11 @@ class EnhancedLogger:
 
         if self.config.save_detailed_logs:
             # Save training logs
-            with open("logs/training_logs.json", "w") as f:
+            with open(os.path.join(self.log_dir, "training_logs.json"), "w") as f:
                 json.dump(self.training_logs, f, indent=2)
 
             # Save analysis logs
-            with open("logs/analysis_logs.json", "w") as f:
+            with open(os.path.join(self.log_dir, "analysis_logs.json"), "w") as f:
                 json.dump(self.analysis_logs, f, indent=2)
 
             self.main_logger.info("Logs saved to JSON files")
@@ -131,7 +133,7 @@ class EnhancedLogger:
         }
 
         # Save as JSON
-        with open("logs/summary_report.json", "w") as f:
+        with open(os.path.join(self.log_dir, "summary_report.json"), "w") as f:
             json.dump(summary, f, indent=2)
 
         # Save as human-readable text
@@ -212,5 +214,21 @@ Max Confidence: {summary['analysis_summary'].get('confidence_distribution', {}).
 Std Deviation: {summary['analysis_summary'].get('confidence_distribution', {}).get('std', 0):.4f}
 """
 
-        with open("logs/summary_report.txt", "w") as f:
+        with open(os.path.join(self.log_dir, "summary_report.txt"), "w") as f:
             f.write(text_summary)
+
+    # --- Utility for JSONL writing used by merged agent ---
+    def _write_jsonl(self, path: str, obj: Dict[str, Any]):
+        try:
+            os.makedirs(os.path.dirname(path) or self.log_dir, exist_ok=True)
+        except Exception:
+            pass
+        try:
+            with open(path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        except Exception as e:
+            # Also mirror to main logger for visibility
+            try:
+                self.main_logger.warning(f"Failed to write JSONL: {e}")
+            except Exception:
+                pass

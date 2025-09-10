@@ -35,7 +35,8 @@ def main():
     patch_openrouter_quality_guard()
     patch_enrich_run_iteration_metrics()
 
-    logger = _p3a.EnhancedLogger(_p1a.AnalysisConfig())
+    # ВАЖЛИВО: використовуємо пропатчений логер з agent_mod, щоб мати JSONL та лог-директорію
+    logger = agent_mod.EnhancedLogger(_p1a.AnalysisConfig())
 
     agent = agent_mod.EnhancedVideoAgentV4Merged(
         api=args.api,
@@ -43,6 +44,7 @@ def main():
         state_dir=args.state_dir,
         seconds=max(5.0, args.seconds),
         logger=logger,
+        openrouter_key=args.openrouter_key,
         reference_only=bool(args.reference_only),
         reference_file=args.reference_file,
     )
