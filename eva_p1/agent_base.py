@@ -91,6 +91,72 @@ class EnhancedVideoAgentV4:
         log.info(f"🔥 MEGA EROTIC intelligent JSON prompt generation enabled")
         log.info(f"⏰ Minimum video duration: {self.seconds}s")
 
+    def get_stats_v4(self) -> Dict[str, Any]:
+        """Return aggregated stats for QA CLI and UI.
+
+        Mirrors the structure used by the web server: total_generated, total_rated,
+        pending_count, avg_rating, best_score, bandit_iterations, learning_arms.
+        """
+        try:
+            knowledge = self._load_knowledge() if isinstance(self.knowledge, dict) else {}
+            manual = self._load_manual_ratings() if isinstance(self.manual_ratings, dict) else {}
+            # Bandit state
+            bandit_path = os.path.join(self.state_dir, "bandit_state.json")
+            bandit_state = {}
+            try:
+                if os.path.exists(bandit_path):
+                    with open(bandit_path, 'r', encoding='utf-8') as f:
+                        bandit_state = json.load(f)
+            except Exception:
+                bandit_state = {}
+
+            total_generated = len(knowledge.get("history", [])) if isinstance(knowledge, dict) else 0
+            total_rated = len(manual) if isinstance(manual, dict) else 0
+
+            # Pending = files present but not rated yet
+            pending_count = 0
+            try:
+                import glob
+                video_files = glob.glob(f"{self.comfyui_output}/*.mp4")
+                rated_names = set(manual.keys()) if isinstance(manual, dict) else set()
+                pending_count = len([p for p in video_files if os.path.basename(p) not in rated_names])
+            except Exception:
+                pending_count = 0
+
+            # Average manual overall
+            avg_rating = 0.0
+            try:
+                vals = []
+                for v in (manual.values() if isinstance(manual, dict) else []):
+                    r = v.get('rating') if isinstance(v, dict) else None
+                    if isinstance(r, dict) and 'overall_quality' in r:
+                        vals.append(float(r.get('overall_quality', 0)))
+                if vals:
+                    avg_rating = sum(vals) / len(vals)
+            except Exception:
+                avg_rating = 0.0
+
+            return {
+                "total_generated": total_generated,
+                "total_rated": total_rated,
+                "pending_count": pending_count,
+                "avg_rating": avg_rating,
+                "best_score": (knowledge or {}).get("best_score", 0),
+                "bandit_iterations": (bandit_state or {}).get("t", 0),
+                "learning_arms": len((bandit_state or {}).get("arms", [])),
+            }
+        except Exception as e:
+            log.warning(f"get_stats_v4 failed: {e}")
+            return {
+                "total_generated": 0,
+                "total_rated": 0,
+                "pending_count": 0,
+                "avg_rating": 0.0,
+                "best_score": 0,
+                "bandit_iterations": 0,
+                "learning_arms": 0,
+            }
+
     def _extract_manual_overall(self, rating_data: dict) -> float:
         """Універсальний екстрактор ручних оцінок для різних форматів"""
         r = rating_data.get("rating", {})
@@ -155,39 +221,39 @@ class EnhancedVideoAgentV4:
             "/workspace/ComfyUI/output/video",
             f"{self.comfyui_output}",
             "./workspace/ComfyUI/output",
-            "workspace/ComfyUI/output", 
+            "workspace/ComfyUI/output",
             "./output",
-            "output"
+            "output",
         ]
 
         log.info(f"🔍 Searching for video with prefix: {prefix}")
 
+        import time as _t
+        newest_any = (None, -1.0)
         for search_dir in search_paths:
-            if not os.path.exists(search_dir):
+            if not os.path.isdir(search_dir):
                 continue
-
             try:
-                import pathlib, time
-                pattern_files = list(pathlib.Path(search_dir).glob(f"*{prefix}*.mp4"))
-                if pattern_files:
-                    video_path = str(max(pattern_files, key=lambda p: p.stat().st_mtime))
-                    log.info(f"✅ Found video with prefix: {video_path}")
-                    return video_path
-
-                all_videos = list(pathlib.Path(search_dir).glob("*.mp4"))
-                if all_videos:
-                    recent_videos = [
-                        v for v in all_videos 
-                        if time.time() - v.stat().st_mtime < 180
-                    ]
-                    if recent_videos:
-                        video_path = str(max(recent_videos, key=lambda p: p.stat().st_mtime))
-                        log.info(f"✅ Found recent video: {video_path}")
-                        return video_path
-
+                for entry in os.scandir(search_dir):
+                    if not entry.is_file():
+                        continue
+                    name = entry.name
+                    if not name.lower().endswith('.mp4'):
+                        continue
+                    mtime = entry.stat().st_mtime
+                    # Prefer prefix match first
+                    if prefix and prefix in name:
+                        log.info(f"✅ Found by prefix in {search_dir}: {name}")
+                        return os.path.join(search_dir, name)
+                    # Track newest as fallback within last 3 minutes
+                    if _t.time() - mtime < 180 and mtime > newest_any[1]:
+                        newest_any = (os.path.join(search_dir, name), mtime)
             except Exception as e:
                 log.warning(f"Error searching in {search_dir}: {e}")
 
+        if newest_any[0]:
+            log.info(f"✅ Found recent video: {newest_any[0]}")
+            return newest_any[0]
         return None
 
     def create_thumbnail(self, video_path: str, video_id: str) -> Optional[str]:
@@ -254,4 +320,177 @@ class EnhancedVideoAgentV4:
         self._save_review_queue()
 
         log.info(f"✚ Added to review queue: {video_id} (priority: {priority})")
+
+    # ==== High-level search/generation loop expected by QA CLI ====
+    def run_iteration_v4(self, params: Dict[str, Any]):
+        """Single iteration: apply params to workflow, queue in ComfyUI, wait, analyze, update knowledge/bandit.
+
+        Returns: (score, metrics, video_path, applied_workflow)
+        """
+        from eva_p1.workflow import apply_enhanced_params_to_workflow
+        # Always autogenerate prompt/negative via mega_erotic_generator (V5-like)
+        try:
+            pj = self.mega_erotic_generator.generate_ultra_detailed_json_prompt()
+            params['prompt'] = self.mega_erotic_generator.convert_to_erotic_text_prompt(pj)
+
+            # Base negative from generator + extended hard blacklist for style/quality/anatomy artifacts
+            extended_negative = (
+                "anime, manga, cartoon, animated, 2d, illustration, drawing, sketch, painting, artwork, digital art, cgi, "
+                "3d render, stylized, cel shading, toon shading, comic style, graphic novel, webtoon, manhwa, chibi, kawaii, "
+                "doll, toy, figurine, plastic, artificial, fake, synthetic, rendered, computer generated, video game character, "
+                "fantasy character, unreal, surreal, abstract, conceptual, artistic interpretation, low quality, worst quality, "
+                "blurry, out of focus, pixelated, compressed, jpeg artifacts, noise, grain, distorted, deformed, disfigured, malformed, "
+                "mutated, ugly, grotesque, hideous, repulsive, bad anatomy, wrong anatomy, extra limbs, missing limbs, extra arms, "
+                "missing arms, extra legs, missing legs, extra fingers, missing fingers, fused fingers, too many fingers, extra hands, "
+                "missing hands, malformed hands, bad hands, poorly drawn hands, extra heads, missing head, multiple heads, extra eyes, "
+                "missing eyes, cross-eyed, extra mouth, missing mouth, extra nose, bad face, poorly drawn face, asymmetrical face, long neck, "
+                "short neck, thick neck, no neck, extra body parts, missing body parts, floating limbs, disconnected limbs, cropped limbs, "
+                "cut off, out of frame, text, watermark, signature, logo, username, artist name, copyright, brand, trademark, oversaturated, "
+                "undersaturated, overexposed, underexposed, high contrast, low contrast, monochrome when color expected, sepia, black and white "
+                "when color expected, static, motionless, frozen, lifeless, robotic, mechanical, stiff, unnatural movement, jerky animation, "
+                "low frame rate, stuttering, glitching, artifacting"
+            )
+            base_neg = self.mega_erotic_generator.get_erotic_negative_prompt(pj)
+            params['negative_prompt'] = (base_neg + ", " + extended_negative).strip(', ')
+        except Exception as e:
+            log.warning(f"Prompt generation failed: {e}")
+        # Set unique prefix to bind outputs; save prompt artifacts
+        prefix = f"gen_{int(time.time())}"
+        try:
+            params['prefix'] = prefix
+            # Save prompt artifacts for traceability
+            os.makedirs(self.prompts_dir, exist_ok=True)
+            prompt_txt_path = os.path.join(self.prompts_dir, f"{prefix}.prompt.txt")
+            with open(prompt_txt_path, 'w', encoding='utf-8') as f:
+                f.write(params.get('prompt', ''))
+            prompt_json_path = os.path.join(self.prompts_dir, f"{prefix}.prompt.json")
+            with open(prompt_json_path, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'timestamp': int(time.time()),
+                    'prompt': params.get('prompt'),
+                    'negative_prompt': params.get('negative_prompt'),
+                    'params': {k: v for k, v in params.items() if k not in ('prompt','negative_prompt')},
+                }, f, ensure_ascii=False, indent=2)
+            log.info(f"📝 Saved prompt: {prompt_txt_path}")
+        except Exception as e:
+            log.warning(f"Failed to save prompt artifacts: {e}")
+
+        # Prepare workflow with params
+        wf = apply_enhanced_params_to_workflow(self.base_wf, params)
+        try:
+            # Queue job
+            prompt_id = self.client.queue(wf)
+            hist = self.client.wait(prompt_id, timeout_s=int(max(600, params.get('seconds', self.seconds) * 120)))
+        except Exception as e:
+            log.warning(f"ComfyUI generation failed: {e}")
+            return 0.0, {"error": str(e)}, None, wf
+
+        # Find produced video (by recent timestamp or prefix)
+        video_path = self.find_generated_video(prefix) or self.find_generated_video("")
+        metrics = {}
+        score = 0.0
+        if video_path and os.path.exists(video_path):
+            # Basic analysis (fast)
+            try:
+                metrics = self.analyzer.analyze(video_path)
+                score = float(metrics.get('overall', 0.0))
+            except Exception as e:
+                log.warning(f"Basic analysis failed: {e}")
+                metrics = {"overall": 0.0}
+
+            # Update knowledge
+            try:
+                entry = {
+                    "video": video_path,
+                    "timestamp": int(time.time()),
+                    "params": params,
+                    "metrics": metrics,
+                    "score": score,
+                    "prompt": params.get('prompt'),
+                    "negative_prompt": params.get('negative_prompt'),
+                    "combo": [params.get('sampler'), params.get('scheduler')],
+                }
+                self.knowledge.setdefault("history", []).append(entry)
+                if score > self.knowledge.get("best_score", 0):
+                    self.knowledge["best_score"] = score
+                    self.knowledge["best_params"] = {"params": params, "metrics": metrics}
+                self._save_knowledge()
+            except Exception as e:
+                log.warning(f"Knowledge update failed: {e}")
+
+            # Add to manual review queue (helps UI)
+            try:
+                combo = [params.get('sampler'), params.get('scheduler')]
+                self.add_to_review_queue(video_path, params, metrics, combo)
+            except Exception:
+                pass
+
+            # Update bandit
+            try:
+                self.bandit.update(params, max(0.0, min(1.0, score)))
+            except Exception as e:
+                log.warning(f"Bandit update failed: {e}")
+
+        return score, metrics, video_path, wf
+
+    def search_v4(self, iterations: int = 10):
+        """Main search loop.
+
+        Behavior:
+        - If whitelist file auto_state/reference_params.json exists and contains combos, iterate over them (cycling if iterations > len(whitelist)).
+        - Otherwise, fall back to MultiDimensionalBandit selection.
+        """
+        wl = self._load_whitelist_params()
+        iters = int(max(1, iterations))
+        if wl:
+            log.info(f"✅ Whitelist mode: {len(wl)} preset combos found in reference_params.json")
+            for i in range(iters):
+                raw = wl[i % len(wl)]
+                params = raw.get('params') if isinstance(raw, dict) else None
+                if not isinstance(params, dict):
+                    params = raw if isinstance(raw, dict) else {}
+                # Ensure seconds present
+                params.setdefault('seconds', self.seconds)
+                log.info(f"▶️ Iteration {i+1}/{iters} (whitelist): params={params}")
+                score, metrics, video_path, _ = self.run_iteration_v4(params)
+                log.info(f"✅ Done iter {i+1}: score={score:.3f}, video={video_path}")
+            return
+
+        # Fallback: bandit-driven search
+        for i in range(iters):
+            try:
+                params = self.bandit.select_params()
+            except Exception as e:
+                log.warning(f"Bandit param select failed: {e}. Using defaults.")
+                params = {"fps": 20, "seconds": self.seconds, "sampler": "euler", "scheduler": "normal", "steps": 25, "cfg_scale": 7.0, "width": 768, "height": 432}
+            log.info(f"▶️ Iteration {i+1}/{iters}: params={params}")
+            score, metrics, video_path, _ = self.run_iteration_v4(params)
+            log.info(f"✅ Done iter {i+1}: score={score:.3f}, video={video_path}")
+
+    def _load_whitelist_params(self):
+        """Load whitelist parameter combinations from reference_params.json in state_dir.
+
+        Supported formats:
+        - Array of {"params": {...}}
+        - Array of params dicts
+        - {"combos": [...]} or {"params_list": [...]} wrappers
+        Returns list (possibly empty) of items (dicts). Caller will extract 'params' if present.
+        """
+        import json
+        ref_path = os.path.join(self.state_dir, 'reference_params.json')
+        try:
+            if not os.path.exists(ref_path):
+                return []
+            with open(ref_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                for key in ('combos', 'params_list', 'list'):
+                    if isinstance(data.get(key), list):
+                        return data.get(key)
+            return []
+        except Exception as e:
+            log.warning(f"Failed to load whitelist params: {e}")
+            return []
 

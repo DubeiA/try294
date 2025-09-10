@@ -13,9 +13,15 @@ import eva_p1.openrouter_analyzer as _p1gpt
 import eva_p2.merged_agent as _p2a
 import eva_p2.cli_patch as _p2b
 import eva_p3.logger as _p3a
-import eva_p3.enhanced_analyzer as _p3b
+try:
+    import eva_p3.enhanced_analyzer as _p3b  # optional legacy module
+except Exception:
+    _p3b = None
 import eva_p3.video_processor as _p3c
-import eva_p3.training as _p3d
+try:
+    import eva_p3.training as _p3d  # optional
+except Exception:
+    _p3d = None
 
 agent_mod = SimpleNamespace()
 

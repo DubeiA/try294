@@ -17,7 +17,10 @@ class ComfyClient:
             r = requests.post(url, json=payload, timeout=120)
             r.raise_for_status()
             data = r.json()
-            return data.get("prompt_id") or data.get("id")
+            pid = data.get("prompt_id") or data.get("id")
+            if not pid:
+                raise ValueError("ComfyUI queue: missing prompt_id in response")
+            return pid
         except Exception as e:
             log.error(f"Failed to queue workflow: {e}")
             raise
@@ -33,7 +36,7 @@ class ComfyClient:
                 if r.status_code == 200:
                     hist = r.json()
                     entry = hist[prompt_id] if isinstance(hist, dict) and prompt_id in hist else hist
-                    if entry.get("status", {}).get("completed") or entry.get("outputs"):
+                    if (isinstance(entry, dict) and entry.get("status", {}).get("completed")) or (isinstance(entry, dict) and entry.get("outputs")):
                         return entry
             except Exception as e:
                 log.warning(f"Polling error: {e}")

@@ -46,7 +46,7 @@ def apply_enhanced_params_to_workflow(base: Dict[str, Any], params: Dict[str, An
             wf["74"]["inputs"]["height"] = int(params["height"])
 
     # Apply sampler settings
-    if "sampler" in params and "scheduler" in params:
+    if params.get("sampler") or params.get("scheduler"):
         sampler = params["sampler"]
         scheduler = params["scheduler"]
 
@@ -74,9 +74,12 @@ def apply_enhanced_params_to_workflow(base: Dict[str, Any], params: Dict[str, An
     if "seed_low" in params and "78" in wf:
         wf["78"]["inputs"]["noise_seed"] = int(params["seed_low"])
 
-    # Apply output prefix
-    if "prefix" in params and "80" in wf:
-        wf["80"]["inputs"]["filename_prefix"] = params["prefix"]
+    # Apply output prefix to all output nodes we know about
+    prefix = params.get("prefix")
+    if prefix:
+        for node_id in ("80", "90", "100", "110"):
+            if node_id in wf and isinstance(wf[node_id].get("inputs"), dict) and "filename_prefix" in wf[node_id]["inputs"]:
+                wf[node_id]["inputs"]["filename_prefix"] = prefix
 
     return wf
 

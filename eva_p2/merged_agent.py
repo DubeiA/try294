@@ -1,14 +1,19 @@
 import os, time
+from dataclasses import asdict
 from eva_env_base import log
 from eva_p1.analysis_config import AnalysisConfig
+from eva_p1.agent_base import EnhancedVideoAgentV4
 from eva_p3.logger import EnhancedLogger
 from eva_p3.video_processor import VideoProcessor
-from eva_p3.training import EnhancedTrainingSystem
+try:
+    from eva_p3.training import EnhancedTrainingSystem
+except Exception:
+    EnhancedTrainingSystem = None
 
 # 1:1 copy from eva_p2_merged_agent.py
 class EnhancedVideoAgentV4Merged(EnhancedVideoAgentV4):
     def __init__(self, api: str, base_workflow: str, state_dir: str = None, seconds: float = 5.0, openrouter_key: str = None,
-                 use_enhanced_analysis: bool = True, train_improved: bool = False):
+                 use_enhanced_analysis: bool = True, train_improved: bool = False, logger=None):
         super().__init__(api=api, base_workflow=base_workflow, state_dir=state_dir, seconds=seconds, openrouter_key=openrouter_key)
 
         self.use_enhanced_analysis = bool(use_enhanced_analysis)
@@ -16,14 +21,11 @@ class EnhancedVideoAgentV4Merged(EnhancedVideoAgentV4):
         self.video_processor = None
         self.training_system = None
 
-        # Prepare unified logs dir
-        merged_logs_dir = os.path.join(self.state_dir, "logs_improved")
-        os.makedirs(merged_logs_dir, exist_ok=True)
-
         # Initialize improved logger & analyzer
         try:
             cfg = AnalysisConfig()  # defaults are fine
-            self.enhanced_logger = EnhancedLogger(config=cfg, log_dir=merged_logs_dir)
+            # Use provided logger if any, else create default
+            self.enhanced_logger = logger if logger is not None else EnhancedLogger(config=cfg)
             self.video_processor = VideoProcessor(config=cfg, logger=self.enhanced_logger)
             log.info("🧪 Enhanced analyzer & logger are ready")
         except Exception as e:
@@ -31,12 +33,15 @@ class EnhancedVideoAgentV4Merged(EnhancedVideoAgentV4):
 
         # Optional: run improved training system once
         if train_improved:
-            try:
-                self.training_system = EnhancedTrainingSystem(logger=self.enhanced_logger)
-                self.training_system.train_all_models(epochs=3)  # keep it short
-                log.info("🧪 Improved training system finished")
-            except Exception as e:
-                log.warning(f"Improved training system failed: {e}")
+            if EnhancedTrainingSystem is None:
+                log.warning("Improved training system not available; skipping training phase")
+            else:
+                try:
+                    self.training_system = EnhancedTrainingSystem(logger=self.enhanced_logger)
+                    self.training_system.train_all_models(epochs=3)  # keep it short
+                    log.info("🧪 Improved training system finished")
+                except Exception as e:
+                    log.warning(f"Improved training system failed: {e}")
 
     def run_iteration_v4(self, params):
         # Generate with the original pipeline first
@@ -52,8 +57,8 @@ class EnhancedVideoAgentV4Merged(EnhancedVideoAgentV4):
                 deep_penalty = float(getattr(det, "overall_deepfake_score", 0.5))
                 deep_quality = max(0.0, min(1.0, 1.0 - deep_penalty))
 
-                # Blend original & improved
-                blended = 0.6 * float(base_score) + 0.4 * deep_quality
+                # Blend original & improved (clamp to [0,1])
+                blended = max(0.0, min(1.0, 0.6 * float(base_score) + 0.4 * deep_quality))
 
                 # Augment metrics
                 metrics = dict(metrics) if isinstance(metrics, dict) else {}
