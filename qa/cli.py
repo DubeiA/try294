@@ -22,6 +22,8 @@ def main():
     parser.add_argument("--openrouter-key")
     parser.add_argument("--use-enhanced-analysis", action="store_true")
     parser.add_argument("--train-improved", action="store_true")
+    parser.add_argument("--reference-only", action="store_true", help="Використовувати тільки еталонні параметри з reference_params.json")
+    parser.add_argument("--reference-file", type=str, help="Шлях до reference_params.json (опційно)")
     args = parser.parse_args()
 
     if args.openrouter_key:
@@ -41,6 +43,8 @@ def main():
         state_dir=args.state_dir,
         seconds=max(5.0, args.seconds),
         logger=logger,
+        reference_only=bool(args.reference_only),
+        reference_file=args.reference_file,
     )
 
     stats = agent.get_stats_v4()
